@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: razorrecall
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/razorrecall
+    username: sunny.
+    password:
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
