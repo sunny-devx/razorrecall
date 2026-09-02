@@ -112,6 +112,22 @@ public class RecoveryCaseController {
         }
     }
 
+    @PostMapping("/evaluate-detected")
+    public ResponseEntity<List<EvaluationResponse>> evaluateDetectedCases() {
+        List<RecoveryCaseService.EvaluationResult> results = recoveryCaseService.evaluateDetectedCases();
+        List<EvaluationResponse> responses = results.stream()
+                .map(r -> new EvaluationResponse(
+                        r.recoveryCase().getId(),
+                        r.newStatus().name(),
+                        r.proposedStrategy().name(),
+                        r.recoveryCase().isEligible(),
+                        r.nextActionAt(),
+                        r.message()
+                ))
+                .toList();
+        return ResponseEntity.ok(responses);
+    }
+
     @PostMapping("/{id}/dispatch")
     public ResponseEntity<?> dispatchAction(
             @PathVariable("id") String idStr,

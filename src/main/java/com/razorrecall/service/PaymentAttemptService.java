@@ -45,12 +45,20 @@ public class PaymentAttemptService {
     }
 
     @Transactional
-    public PaymentAttempt markPaymentCaptured(PaymentAttempt attempt, BigDecimal capturedAmount) {
+    public PaymentAttempt markPaymentCaptured(PaymentAttempt attempt, BigDecimal capturedAmount, String capturedPaymentId) {
         attempt.setStatus("CAPTURED");
         if (capturedAmount != null && capturedAmount.compareTo(BigDecimal.ZERO) > 0) {
             attempt.setAmount(capturedAmount);
         }
+        if (capturedPaymentId != null && !capturedPaymentId.isBlank()) {
+            attempt.setRazorpayPaymentId(capturedPaymentId);
+        }
         return paymentAttemptRepository.save(attempt);
+    }
+
+    @Transactional
+    public PaymentAttempt markPaymentCaptured(PaymentAttempt attempt, BigDecimal capturedAmount) {
+        return markPaymentCaptured(attempt, capturedAmount, null);
     }
 
     @Transactional

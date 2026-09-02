@@ -88,7 +88,7 @@ class RecoveryReconciliationTest {
         assertTrue(result.reconciled());
         assertNotNull(result.recoveryCase());
         assertEquals(RecoveryStatus.RECOVERED.name(), result.recoveryCase().getStatus());
-        verify(paymentAttemptService).markPaymentCaptured(attempt, amount);
+        verify(paymentAttemptService).markPaymentCaptured(attempt, amount, paymentId);
         verify(recoveryCaseRepository).save(rc);
     }
 
@@ -120,7 +120,7 @@ class RecoveryReconciliationTest {
 
         assertTrue(result.reconciled());
         assertEquals(RecoveryStatus.RECOVERED.name(), result.recoveryCase().getStatus());
-        verify(paymentAttemptService).markPaymentCaptured(attempt, amount);
+        verify(paymentAttemptService).markPaymentCaptured(attempt, amount, paymentId);
     }
 
     @Test

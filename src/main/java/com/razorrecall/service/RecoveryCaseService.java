@@ -229,6 +229,17 @@ public class RecoveryCaseService {
     }
 
     @Transactional
+    public List<EvaluationResult> evaluateDetectedCases() {
+        List<RecoveryCase> detectedCases = recoveryCaseRepository.findAll().stream()
+                .filter(rc -> RecoveryStatus.DETECTED.name().equalsIgnoreCase(rc.getStatus()))
+                .toList();
+
+        return detectedCases.stream()
+                .map(rc -> evaluateCase(rc.getId()))
+                .toList();
+    }
+
+    @Transactional
     public ReconciliationResult reconcileCapturedPayment(
             String orderId,
             String referenceId,
@@ -295,7 +306,7 @@ public class RecoveryCaseService {
 
         PaymentAttempt attempt = savedCase.getPaymentAttempt();
         if (attempt != null) {
-            paymentAttemptService.markPaymentCaptured(attempt, amount);
+            paymentAttemptService.markPaymentCaptured(attempt, amount, paymentId);
         }
 
         return new ReconciliationResult(savedCase, true, "Recovery case successfully transitioned to RECOVERED");
