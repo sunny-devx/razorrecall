@@ -15,3 +15,7 @@ spring:
 
   flyway:
     enabled: true
+
+razorrecall:
+  webhook:
+    secret: ${RAZORPAY_WEBHOOK_SECRET}
