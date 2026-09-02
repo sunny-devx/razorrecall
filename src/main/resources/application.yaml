@@ -21,3 +21,7 @@ razorrecall:
     secret: ${RAZORPAY_WEBHOOK_SECRET}
   guardrails:
     max-recovery-amount: 500000.00
+  razorpay:
+    mode: mock
+    key-id: ${RAZORPAY_KEY_ID:rzp_test_dummy}
+    key-secret: ${RAZORPAY_KEY_SECRET:dummy_secret}

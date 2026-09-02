@@ -2,6 +2,8 @@ package com.razorrecall.controller;
 
 import com.razorrecall.domain.PaymentAttempt;
 import com.razorrecall.domain.RecoveryCase;
+import com.razorrecall.domain.RecoveryStatus;
+import com.razorrecall.dto.ActionExecutionResult;
 import com.razorrecall.service.RecoveryCaseService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -108,6 +110,44 @@ public class RecoveryCaseController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "Evaluation failed"));
         }
+    }
+
+    @PostMapping("/{id}/dispatch")
+    public ResponseEntity<?> dispatchAction(
+            @PathVariable("id") String idStr,
+            @RequestParam(value = "force", defaultValue = "false") boolean force
+    ) {
+        UUID id;
+        try {
+            id = UUID.fromString(idStr);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid UUID format"));
+        }
+
+        try {
+            ActionExecutionResult result = recoveryCaseService.dispatchAction(id, force);
+            if (result.targetStatus() == RecoveryStatus.ACTION_FAILED) {
+                return ResponseEntity.status(502).body(Map.of(
+                        "error", "Payment gateway dispatch failed",
+                        "recoveryCaseId", result.recoveryCaseId(),
+                        "status", result.targetStatus().name(),
+                        "message", result.message()
+                ));
+            }
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Dispatch failed"));
+        }
+    }
+
+    @PostMapping("/dispatch-due")
+    public ResponseEntity<List<ActionExecutionResult>> dispatchDueCases() {
+        List<ActionExecutionResult> results = recoveryCaseService.dispatchDueCases();
+        return ResponseEntity.ok(results);
     }
 
     @GetMapping
