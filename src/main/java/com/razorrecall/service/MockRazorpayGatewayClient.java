@@ -2,6 +2,7 @@ package com.razorrecall.service;
 
 import com.razorrecall.dto.PaymentLinkRequest;
 import com.razorrecall.dto.PaymentLinkResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +13,11 @@ import java.util.HexFormat;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
+@ConditionalOnProperty(
+        name = "razorrecall.razorpay.mode",
+        havingValue = "mock",
+        matchIfMissing = true
+)
 public class MockRazorpayGatewayClient implements RazorpayGatewayClient {
 
     private volatile boolean simulateFailure = false;
