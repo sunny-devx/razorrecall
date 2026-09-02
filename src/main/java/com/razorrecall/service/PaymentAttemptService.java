@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,23 @@ public class PaymentAttemptService {
             return Optional.empty();
         }
         return paymentAttemptRepository.findByRazorpayPaymentId(razorpayPaymentId);
+    }
+
+    public Optional<PaymentAttempt> findLatestByOrderId(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            return Optional.empty();
+        }
+        List<PaymentAttempt> attempts = paymentAttemptRepository.findByOrderIdOrderByCreatedAtDesc(orderId);
+        return attempts.isEmpty() ? Optional.empty() : Optional.of(attempts.get(0));
+    }
+
+    @Transactional
+    public PaymentAttempt markPaymentCaptured(PaymentAttempt attempt, BigDecimal capturedAmount) {
+        attempt.setStatus("CAPTURED");
+        if (capturedAmount != null && capturedAmount.compareTo(BigDecimal.ZERO) > 0) {
+            attempt.setAmount(capturedAmount);
+        }
+        return paymentAttemptRepository.save(attempt);
     }
 
     @Transactional

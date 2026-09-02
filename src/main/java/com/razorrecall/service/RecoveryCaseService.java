@@ -5,10 +5,13 @@ import com.razorrecall.domain.RecoveryCase;
 import com.razorrecall.domain.RecoveryStatus;
 import com.razorrecall.domain.RecoveryStrategy;
 import com.razorrecall.dto.ActionExecutionResult;
+import com.razorrecall.dto.RecoveryMetricsResponse;
 import com.razorrecall.repository.RecoveryCaseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +25,7 @@ public class RecoveryCaseService {
     private final RecoveryDecisionEngine recoveryDecisionEngine;
     private final RecoveryGuardrailService recoveryGuardrailService;
     private final RecoveryActionDispatcher recoveryActionDispatcher;
+    private final PaymentAttemptService paymentAttemptService;
 
     public record EvaluationResult(
             RecoveryCase recoveryCase,
@@ -31,17 +35,25 @@ public class RecoveryCaseService {
             String message
     ) {}
 
+    public record ReconciliationResult(
+            RecoveryCase recoveryCase,
+            boolean reconciled,
+            String message
+    ) {}
+
     public RecoveryCaseService(
             RecoveryCaseRepository recoveryCaseRepository,
             FailureClassifier failureClassifier,
             RecoveryDecisionEngine recoveryDecisionEngine,
             RecoveryGuardrailService recoveryGuardrailService,
-            RecoveryActionDispatcher recoveryActionDispatcher) {
+            RecoveryActionDispatcher recoveryActionDispatcher,
+            PaymentAttemptService paymentAttemptService) {
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.failureClassifier = failureClassifier;
         this.recoveryDecisionEngine = recoveryDecisionEngine;
         this.recoveryGuardrailService = recoveryGuardrailService;
         this.recoveryActionDispatcher = recoveryActionDispatcher;
+        this.paymentAttemptService = paymentAttemptService;
     }
 
     public RecoveryCase save(RecoveryCase recoveryCase) {
@@ -214,5 +226,145 @@ public class RecoveryCaseService {
                     }
                 })
                 .toList();
+    }
+
+    @Transactional
+    public ReconciliationResult reconcileCapturedPayment(
+            String orderId,
+            String referenceId,
+            String paymentId,
+            BigDecimal amount
+    ) {
+        RecoveryCase recoveryCase = null;
+
+        // Priority 1: Primary - order_id matching failed PaymentAttempt.order_id
+        if (orderId != null && !orderId.isBlank()) {
+            Optional<PaymentAttempt> attemptOpt = paymentAttemptService.findLatestByOrderId(orderId);
+            if (attemptOpt.isPresent()) {
+                Optional<RecoveryCase> caseOpt = recoveryCaseRepository.findByPaymentAttemptId(attemptOpt.get().getId());
+                if (caseOpt.isPresent()) {
+                    recoveryCase = caseOpt.get();
+                }
+            }
+        }
+
+        // Priority 2: Secondary - recovery_case_id carried through Payment Link reference_id / notes
+        if (recoveryCase == null && referenceId != null && !referenceId.isBlank()) {
+            try {
+                UUID caseId = UUID.fromString(referenceId.trim());
+                recoveryCase = recoveryCaseRepository.findById(caseId).orElse(null);
+            } catch (IllegalArgumentException ignored) {
+                // referenceId is not a valid UUID, proceed to fallback
+            }
+        }
+
+        // Priority 3: Fallback - razorpay_payment_id
+        if (recoveryCase == null && paymentId != null && !paymentId.isBlank()) {
+            Optional<PaymentAttempt> attemptOpt = paymentAttemptService.findByRazorpayPaymentId(paymentId);
+            if (attemptOpt.isPresent()) {
+                recoveryCase = recoveryCaseRepository.findByPaymentAttemptId(attemptOpt.get().getId()).orElse(null);
+            }
+        }
+
+        // Handle unmatched captured payment gracefully
+        if (recoveryCase == null) {
+            return new ReconciliationResult(null, false, "No matching recovery case found for captured payment");
+        }
+
+        String currentStatus = recoveryCase.getStatus();
+
+        // Idempotency: duplicate captured webhook must not perform transition twice
+        if (RecoveryStatus.RECOVERED.name().equalsIgnoreCase(currentStatus)) {
+            return new ReconciliationResult(recoveryCase, true, "Recovery case is already RECOVERED");
+        }
+
+        // Guardrail: only WAITING_FOR_OUTCOME or ACTION_PENDING may transition to RECOVERED
+        if (!RecoveryStatus.WAITING_FOR_OUTCOME.name().equalsIgnoreCase(currentStatus)
+                && !RecoveryStatus.ACTION_PENDING.name().equalsIgnoreCase(currentStatus)) {
+            return new ReconciliationResult(
+                    recoveryCase,
+                    false,
+                    "Recovery case in status '" + currentStatus + "' cannot transition to RECOVERED"
+            );
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        recoveryCase.setStatus(RecoveryStatus.RECOVERED.name());
+        recoveryCase.setUpdatedAt(now);
+        RecoveryCase savedCase = recoveryCaseRepository.save(recoveryCase);
+
+        PaymentAttempt attempt = savedCase.getPaymentAttempt();
+        if (attempt != null) {
+            paymentAttemptService.markPaymentCaptured(attempt, amount);
+        }
+
+        return new ReconciliationResult(savedCase, true, "Recovery case successfully transitioned to RECOVERED");
+    }
+
+    public RecoveryMetricsResponse getMetrics() {
+        List<RecoveryCase> allCases = recoveryCaseRepository.findAll();
+
+        long totalCases = allCases.size();
+        long recoveredCases = 0;
+        long actionPendingCases = 0;
+        long waitingForOutcomeCases = 0;
+        long abstainedCases = 0;
+        long escalatedCases = 0;
+        long failedCases = 0;
+        long actionableCases = 0;
+
+        BigDecimal totalAtRiskAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalRecoveredAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        for (RecoveryCase rc : allCases) {
+            String status = rc.getStatus();
+            PaymentAttempt attempt = rc.getPaymentAttempt();
+            BigDecimal attemptAmount = attempt != null && attempt.getAmount() != null
+                    ? attempt.getAmount().setScale(2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+            totalAtRiskAmount = totalAtRiskAmount.add(attemptAmount);
+
+            if (RecoveryStatus.RECOVERED.name().equalsIgnoreCase(status)) {
+                recoveredCases++;
+                totalRecoveredAmount = totalRecoveredAmount.add(attemptAmount);
+                actionableCases++;
+            } else if (RecoveryStatus.ACTION_PENDING.name().equalsIgnoreCase(status)) {
+                actionPendingCases++;
+                actionableCases++;
+            } else if (RecoveryStatus.WAITING_FOR_OUTCOME.name().equalsIgnoreCase(status)) {
+                waitingForOutcomeCases++;
+                actionableCases++;
+            } else if (RecoveryStatus.ABSTAINED.name().equalsIgnoreCase(status)) {
+                abstainedCases++;
+            } else if (RecoveryStatus.ESCALATED.name().equalsIgnoreCase(status)) {
+                escalatedCases++;
+            } else if (RecoveryStatus.ACTION_FAILED.name().equalsIgnoreCase(status)) {
+                failedCases++;
+                actionableCases++;
+            } else if (rc.isEligible()) {
+                actionableCases++;
+            }
+        }
+
+        BigDecimal recoveryRatePercentage = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        if (actionableCases > 0) {
+            recoveryRatePercentage = BigDecimal.valueOf(recoveredCases)
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(BigDecimal.valueOf(actionableCases), 2, RoundingMode.HALF_UP);
+        }
+
+        return new RecoveryMetricsResponse(
+                totalCases,
+                recoveredCases,
+                actionPendingCases,
+                waitingForOutcomeCases,
+                abstainedCases,
+                escalatedCases,
+                failedCases,
+                totalAtRiskAmount,
+                totalRecoveredAmount,
+                recoveryRatePercentage
+        );
     }
 }

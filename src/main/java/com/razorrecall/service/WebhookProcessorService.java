@@ -58,7 +58,16 @@ public class WebhookProcessorService {
         if (existingEvent.isPresent()) {
             WebhookEvent event = existingEvent.get();
             Optional<PaymentAttempt> existingAttempt = paymentAttemptService.findByRazorpayPaymentId(payload.getPaymentId());
+            if (existingAttempt.isEmpty() && payload.getOrderId() != null) {
+                existingAttempt = paymentAttemptService.findLatestByOrderId(payload.getOrderId());
+            }
             Optional<RecoveryCase> existingCase = existingAttempt.flatMap(att -> recoveryCaseService.findByPaymentAttemptId(att.getId()));
+            if (existingCase.isEmpty() && payload.getReferenceId() != null) {
+                try {
+                    UUID caseId = UUID.fromString(payload.getReferenceId().trim());
+                    existingCase = Optional.ofNullable(recoveryCaseService.findById(caseId));
+                } catch (IllegalArgumentException ignored) {}
+            }
 
             return new WebhookProcessingResult(
                     "DUPLICATE",
@@ -111,6 +120,45 @@ public class WebhookProcessorService {
                     recoveryCase.getFailureClass(),
                     recoveryCase.isEligible(),
                     "Payment failure recorded and recovery case initialized"
+            );
+        }
+
+        if ("payment.captured".equalsIgnoreCase(payload.getEventType())) {
+            RecoveryCaseService.ReconciliationResult reconciliation = recoveryCaseService.reconcileCapturedPayment(
+                    payload.getOrderId(),
+                    payload.getReferenceId(),
+                    payload.getPaymentId(),
+                    payload.getAmount()
+            );
+
+            if (reconciliation.reconciled() && reconciliation.recoveryCase() != null) {
+                RecoveryCase rc = reconciliation.recoveryCase();
+                PaymentAttempt attempt = rc.getPaymentAttempt();
+                return new WebhookProcessingResult(
+                        "RECOVERED",
+                        payload.getEventType(),
+                        eventKey,
+                        webhookEvent.getId(),
+                        attempt != null ? attempt.getId() : null,
+                        rc.getId(),
+                        rc.getStatus(),
+                        rc.getFailureClass(),
+                        rc.isEligible(),
+                        reconciliation.message()
+                );
+            }
+
+            return new WebhookProcessingResult(
+                    "RECORDED",
+                    payload.getEventType(),
+                    eventKey,
+                    webhookEvent.getId(),
+                    null,
+                    reconciliation.recoveryCase() != null ? reconciliation.recoveryCase().getId() : null,
+                    reconciliation.recoveryCase() != null ? reconciliation.recoveryCase().getStatus() : null,
+                    reconciliation.recoveryCase() != null ? reconciliation.recoveryCase().getFailureClass() : null,
+                    reconciliation.recoveryCase() != null ? reconciliation.recoveryCase().isEligible() : null,
+                    reconciliation.message()
             );
         }
 

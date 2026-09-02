@@ -334,4 +334,131 @@ class WebhookControllerTest {
         .content(""))
         .andExpect(status().isBadRequest());
   }
+
+  @Test
+  void testPaymentCaptured_ReconcilesWaitingCaseToRecovered() throws Exception {
+    String paymentId = "pay_fail_e2e_" + System.currentTimeMillis();
+    String orderId = "order_e2e_rec_" + System.currentTimeMillis();
+    String secret = secretProvider.getDefaultSecret();
+
+    // 1. Ingest failed payment
+    String failPayload = """
+        {
+          "event": "payment.failed",
+          "payload": {
+            "payment": {
+              "entity": {
+                "id": "%s",
+                "amount": 350000,
+                "currency": "INR",
+                "status": "failed",
+                "order_id": "%s",
+                "error_code": "GATEWAY_ERROR",
+                "error_reason": "gateway_timeout",
+                "error_description": "Bank timeout"
+              }
+            }
+          }
+        }
+        """.formatted(paymentId, orderId);
+    String failSig = signatureVerifier.calculateHmacSha256(failPayload, secret);
+
+    mockMvc.perform(post("/api/webhooks/razorpay")
+        .header("X-Razorpay-Signature", failSig)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(failPayload))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("PROCESSED"));
+
+    PaymentAttempt attempt = paymentAttemptRepository.findByRazorpayPaymentId(paymentId).orElseThrow();
+    RecoveryCase recoveryCase = recoveryCaseRepository.findByPaymentAttemptId(attempt.getId()).orElseThrow();
+
+    // 2. Evaluate -> ACTION_PENDING
+    mockMvc.perform(post("/api/recovery/cases/" + recoveryCase.getId() + "/evaluate"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("ACTION_PENDING"));
+
+    // 3. Dispatch -> WAITING_FOR_OUTCOME
+    mockMvc.perform(post("/api/recovery/cases/" + recoveryCase.getId() + "/dispatch?force=true"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.targetStatus").value("WAITING_FOR_OUTCOME"));
+
+    // 4. Ingest payment.captured with matching order_id
+    String capturedPaymentId = "pay_cap_e2e_" + System.currentTimeMillis();
+    String capPayload = """
+        {
+          "event": "payment.captured",
+          "payload": {
+            "payment": {
+              "entity": {
+                "id": "%s",
+                "amount": 350000,
+                "currency": "INR",
+                "status": "captured",
+                "order_id": "%s"
+              }
+            }
+          }
+        }
+        """.formatted(capturedPaymentId, orderId);
+    String capSig = signatureVerifier.calculateHmacSha256(capPayload, secret);
+
+    mockMvc.perform(post("/api/webhooks/razorpay")
+        .header("X-Razorpay-Signature", capSig)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(capPayload))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("RECOVERED"))
+        .andExpect(jsonPath("$.recoveryStatus").value("RECOVERED"))
+        .andExpect(jsonPath("$.recoveryCaseId").value(recoveryCase.getId().toString()));
+
+    // Verify database state
+    RecoveryCase updatedCase = recoveryCaseRepository.findById(recoveryCase.getId()).orElseThrow();
+    assertEquals("RECOVERED", updatedCase.getStatus());
+
+    PaymentAttempt updatedAttempt = paymentAttemptRepository.findById(attempt.getId()).orElseThrow();
+    assertEquals("CAPTURED", updatedAttempt.getStatus());
+
+    // 5. Idempotent duplicate: send same payment.captured again
+    mockMvc.perform(post("/api/webhooks/razorpay")
+        .header("X-Razorpay-Signature", capSig)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(capPayload))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("DUPLICATE"))
+        .andExpect(jsonPath("$.recoveryStatus").value("RECOVERED"));
+  }
+
+  @Test
+  void testPaymentCaptured_UnmatchedOrder_HandledGracefully() throws Exception {
+    String paymentId = "pay_unmatched_" + System.currentTimeMillis();
+    String orderId = "order_unmatched_" + System.currentTimeMillis();
+    String secret = secretProvider.getDefaultSecret();
+
+    String capPayload = """
+        {
+          "event": "payment.captured",
+          "payload": {
+            "payment": {
+              "entity": {
+                "id": "%s",
+                "amount": 100000,
+                "currency": "INR",
+                "status": "captured",
+                "order_id": "%s"
+              }
+            }
+          }
+        }
+        """.formatted(paymentId, orderId);
+    String capSig = signatureVerifier.calculateHmacSha256(capPayload, secret);
+
+    mockMvc.perform(post("/api/webhooks/razorpay")
+        .header("X-Razorpay-Signature", capSig)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(capPayload))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("RECORDED"))
+        .andExpect(jsonPath("$.recoveryCaseId").doesNotExist());
+  }
 }

@@ -19,6 +19,7 @@ public class RazorpayWebhookPayload {
     private String errorCode;
     private String errorReason;
     private String merchantId;
+    private String referenceId;
 
     public RazorpayWebhookPayload() {
     }
@@ -124,6 +125,29 @@ public class RazorpayWebhookPayload {
                 payload.merchantId = root.get("account_id").asText();
             }
 
+            // Extract reference ID / recovery case ID (for secondary correlation)
+            if (paymentEntity != null && paymentEntity.has("notes")) {
+                if (paymentEntity.get("notes").hasNonNull("reference_id")) {
+                    payload.referenceId = paymentEntity.get("notes").get("reference_id").asText();
+                } else if (paymentEntity.get("notes").hasNonNull("recovery_case_id")) {
+                    payload.referenceId = paymentEntity.get("notes").get("recovery_case_id").asText();
+                }
+            }
+            if (payload.referenceId == null && paymentEntity != null && paymentEntity.hasNonNull("reference_id")) {
+                payload.referenceId = paymentEntity.get("reference_id").asText();
+            }
+            if (payload.referenceId == null && root.hasNonNull("reference_id")) {
+                payload.referenceId = root.get("reference_id").asText();
+            } else if (payload.referenceId == null && root.hasNonNull("recovery_case_id")) {
+                payload.referenceId = root.get("recovery_case_id").asText();
+            } else if (payload.referenceId == null && root.has("notes")) {
+                if (root.get("notes").hasNonNull("reference_id")) {
+                    payload.referenceId = root.get("notes").get("reference_id").asText();
+                } else if (root.get("notes").hasNonNull("recovery_case_id")) {
+                    payload.referenceId = root.get("notes").get("recovery_case_id").asText();
+                }
+            }
+
             if (payload.eventType == null || payload.eventType.isBlank()) {
                 throw new IllegalArgumentException("Missing webhook event type");
             }
@@ -170,5 +194,9 @@ public class RazorpayWebhookPayload {
 
     public String getMerchantId() {
         return merchantId;
+    }
+
+    public String getReferenceId() {
+        return referenceId;
     }
 }

@@ -162,4 +162,9 @@ public class RecoveryCaseController {
 
         return ResponseEntity.ok(responses);
     }
+
+    @GetMapping("/metrics")
+    public ResponseEntity<com.razorrecall.dto.RecoveryMetricsResponse> getMetrics() {
+        return ResponseEntity.ok(recoveryCaseService.getMetrics());
+    }
 }
