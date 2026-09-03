@@ -26,3 +26,9 @@ razorrecall:
     key-id: ${RAZORPAY_KEY_ID:rzp_test_dummy}
     key-secret: ${RAZORPAY_KEY_SECRET:dummy_secret}
     base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com}
+  ai:
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-2.0-flash}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+      timeout-ms: 3000

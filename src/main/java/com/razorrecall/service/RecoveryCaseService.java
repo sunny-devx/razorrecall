@@ -5,6 +5,7 @@ import com.razorrecall.domain.RecoveryCase;
 import com.razorrecall.domain.RecoveryStatus;
 import com.razorrecall.domain.RecoveryStrategy;
 import com.razorrecall.dto.ActionExecutionResult;
+import com.razorrecall.dto.AiDiagnosisResult;
 import com.razorrecall.dto.RecoveryMetricsResponse;
 import com.razorrecall.repository.RecoveryCaseRepository;
 import org.springframework.stereotype.Service;
@@ -32,7 +33,16 @@ public class RecoveryCaseService {
             RecoveryStrategy proposedStrategy,
             RecoveryStatus newStatus,
             OffsetDateTime nextActionAt,
-            String message) {
+            String message,
+            AiDiagnosisResult aiDiagnosis) {
+        public EvaluationResult(
+                RecoveryCase recoveryCase,
+                RecoveryStrategy proposedStrategy,
+                RecoveryStatus newStatus,
+                OffsetDateTime nextActionAt,
+                String message) {
+            this(recoveryCase, proposedStrategy, newStatus, nextActionAt, message, null);
+        }
     }
 
     public record ReconciliationResult(
@@ -134,7 +144,8 @@ public class RecoveryCaseService {
                         decision.strategy(),
                         RecoveryStatus.STOPPED,
                         null,
-                        guardrailResult.failureReason());
+                        guardrailResult.failureReason(),
+                        decision.aiDiagnosis());
             }
             throw new IllegalStateException(guardrailResult.failureReason());
         }
@@ -150,7 +161,8 @@ public class RecoveryCaseService {
                 decision.strategy(),
                 guardrailResult.targetStatus(),
                 guardrailResult.nextActionAt(),
-                decision.reason());
+                decision.reason(),
+                decision.aiDiagnosis());
     }
 
     @Transactional

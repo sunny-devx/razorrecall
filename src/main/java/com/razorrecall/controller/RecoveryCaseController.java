@@ -4,6 +4,7 @@ import com.razorrecall.domain.PaymentAttempt;
 import com.razorrecall.domain.RecoveryCase;
 import com.razorrecall.domain.RecoveryStatus;
 import com.razorrecall.dto.ActionExecutionResult;
+import com.razorrecall.dto.AiDiagnosisResult;
 import com.razorrecall.service.RecoveryCaseService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -60,8 +61,43 @@ public class RecoveryCaseController {
             String proposedStrategy,
             boolean eligible,
             OffsetDateTime nextActionAt,
-            String message
-    ) {}
+            String message,
+            String aiDiagnosis,
+            String aiSuggestedStrategy,
+            Double aiConfidence,
+            List<String> aiRationale,
+            String aiProvider,
+            Boolean aiFallbackUsed
+    ) {
+        public EvaluationResponse(
+                UUID id,
+                String status,
+                String proposedStrategy,
+                boolean eligible,
+                OffsetDateTime nextActionAt,
+                String message
+        ) {
+            this(id, status, proposedStrategy, eligible, nextActionAt, message, null, null, null, null, null, null);
+        }
+
+        public static EvaluationResponse from(RecoveryCaseService.EvaluationResult result) {
+            AiDiagnosisResult diag = result.aiDiagnosis();
+            return new EvaluationResponse(
+                    result.recoveryCase().getId(),
+                    result.newStatus().name(),
+                    result.proposedStrategy().name(),
+                    result.recoveryCase().isEligible(),
+                    result.nextActionAt(),
+                    result.message(),
+                    diag != null ? diag.failureExplanation() : null,
+                    diag != null && diag.suggestedStrategy() != null ? diag.suggestedStrategy().name() : null,
+                    diag != null ? diag.confidence() : null,
+                    diag != null ? diag.rationale() : null,
+                    diag != null ? diag.providerName() : null,
+                    diag != null ? diag.fallbackUsed() : null
+            );
+        }
+    }
 
     public RecoveryCaseController(RecoveryCaseService recoveryCaseService) {
         this.recoveryCaseService = recoveryCaseService;
@@ -94,15 +130,7 @@ public class RecoveryCaseController {
 
         try {
             RecoveryCaseService.EvaluationResult result = recoveryCaseService.evaluateCase(id);
-            EvaluationResponse response = new EvaluationResponse(
-                    result.recoveryCase().getId(),
-                    result.newStatus().name(),
-                    result.proposedStrategy().name(),
-                    result.recoveryCase().isEligible(),
-                    result.nextActionAt(),
-                    result.message()
-            );
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(EvaluationResponse.from(result));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (IllegalStateException e) {
@@ -116,14 +144,7 @@ public class RecoveryCaseController {
     public ResponseEntity<List<EvaluationResponse>> evaluateDetectedCases() {
         List<RecoveryCaseService.EvaluationResult> results = recoveryCaseService.evaluateDetectedCases();
         List<EvaluationResponse> responses = results.stream()
-                .map(r -> new EvaluationResponse(
-                        r.recoveryCase().getId(),
-                        r.newStatus().name(),
-                        r.proposedStrategy().name(),
-                        r.recoveryCase().isEligible(),
-                        r.nextActionAt(),
-                        r.message()
-                ))
+                .map(EvaluationResponse::from)
                 .toList();
         return ResponseEntity.ok(responses);
     }
