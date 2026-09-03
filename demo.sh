@@ -50,6 +50,14 @@ print_header
 
 echo -e "${BLUE}${BOLD}▶ STEP 0: Checking Server Health...${RESET}"
 HEALTH_HTTP=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/actuator/health" || echo "000")
+
+
+
+
+
+
+
+
 if [ "$HEALTH_HTTP" != "200" ]; then
     fail "Cannot connect to RazorRecall server at ${BASE_URL} (HTTP ${HEALTH_HTTP}).\nPlease ensure the application is running via: ./mvnw spring-boot:run"
 fi

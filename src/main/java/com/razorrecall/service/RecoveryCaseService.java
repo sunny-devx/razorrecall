@@ -32,14 +32,14 @@ public class RecoveryCaseService {
             RecoveryStrategy proposedStrategy,
             RecoveryStatus newStatus,
             OffsetDateTime nextActionAt,
-            String message
-    ) {}
+            String message) {
+    }
 
     public record ReconciliationResult(
             RecoveryCase recoveryCase,
             boolean reconciled,
-            String message
-    ) {}
+            String message) {
+    }
 
     public RecoveryCaseService(
             RecoveryCaseRepository recoveryCaseRepository,
@@ -120,7 +120,8 @@ public class RecoveryCaseService {
                 .orElseThrow(() -> new IllegalArgumentException("Recovery case not found for ID: " + recoveryCaseId));
 
         RecoveryDecisionEngine.RecoveryDecision decision = recoveryDecisionEngine.decide(recoveryCase);
-        RecoveryGuardrailService.GuardrailResult guardrailResult = recoveryGuardrailService.validate(recoveryCase, decision);
+        RecoveryGuardrailService.GuardrailResult guardrailResult = recoveryGuardrailService.validate(recoveryCase,
+                decision);
 
         if (!guardrailResult.passed()) {
             if (guardrailResult.targetStatus() == RecoveryStatus.STOPPED) {
@@ -133,8 +134,7 @@ public class RecoveryCaseService {
                         decision.strategy(),
                         RecoveryStatus.STOPPED,
                         null,
-                        guardrailResult.failureReason()
-                );
+                        guardrailResult.failureReason());
             }
             throw new IllegalStateException(guardrailResult.failureReason());
         }
@@ -150,8 +150,7 @@ public class RecoveryCaseService {
                 decision.strategy(),
                 guardrailResult.targetStatus(),
                 guardrailResult.nextActionAt(),
-                decision.reason()
-        );
+                decision.reason());
     }
 
     @Transactional
@@ -165,17 +164,19 @@ public class RecoveryCaseService {
 
         String currentStatus = recoveryCase.getStatus();
         if (!RecoveryStatus.ACTION_PENDING.name().equalsIgnoreCase(currentStatus)) {
-            throw new IllegalStateException("Cannot dispatch case in status '" + currentStatus + "'. Case must be in ACTION_PENDING.");
+            throw new IllegalStateException(
+                    "Cannot dispatch case in status '" + currentStatus + "'. Case must be in ACTION_PENDING.");
         }
 
         OffsetDateTime now = OffsetDateTime.now();
         if (!force && recoveryCase.getNextActionAt() != null && recoveryCase.getNextActionAt().isAfter(now)) {
-            throw new IllegalStateException("Timing guardrail: Recovery action is scheduled for " 
+            throw new IllegalStateException("Timing guardrail: Recovery action is scheduled for "
                     + recoveryCase.getNextActionAt() + ". Use force=true to dispatch immediately.");
         }
 
         RecoveryDecisionEngine.RecoveryDecision decision = recoveryDecisionEngine.decide(recoveryCase);
-        if (decision.strategy() == RecoveryStrategy.ABSTAIN || decision.strategy() == RecoveryStrategy.MANUAL_ESCALATE) {
+        if (decision.strategy() == RecoveryStrategy.ABSTAIN
+                || decision.strategy() == RecoveryStrategy.MANUAL_ESCALATE) {
             throw new IllegalStateException("Cannot dispatch non-actionable strategy: " + decision.strategy());
         }
 
@@ -196,8 +197,7 @@ public class RecoveryCaseService {
                     null,
                     null,
                     now,
-                    "Payment gateway dispatch failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error")
-            );
+                    "Payment gateway dispatch failed: " + (e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
     }
 
@@ -221,8 +221,7 @@ public class RecoveryCaseService {
                                 null,
                                 null,
                                 now,
-                                "Batch dispatch failed: " + e.getMessage()
-                        );
+                                "Batch dispatch failed: " + e.getMessage());
                     }
                 })
                 .toList();
@@ -244,22 +243,23 @@ public class RecoveryCaseService {
             String orderId,
             String referenceId,
             String paymentId,
-            BigDecimal amount
-    ) {
+            BigDecimal amount) {
         RecoveryCase recoveryCase = null;
 
         // Priority 1: Primary - order_id matching failed PaymentAttempt.order_id
         if (orderId != null && !orderId.isBlank()) {
             Optional<PaymentAttempt> attemptOpt = paymentAttemptService.findLatestByOrderId(orderId);
             if (attemptOpt.isPresent()) {
-                Optional<RecoveryCase> caseOpt = recoveryCaseRepository.findByPaymentAttemptId(attemptOpt.get().getId());
+                Optional<RecoveryCase> caseOpt = recoveryCaseRepository
+                        .findByPaymentAttemptId(attemptOpt.get().getId());
                 if (caseOpt.isPresent()) {
                     recoveryCase = caseOpt.get();
                 }
             }
         }
 
-        // Priority 2: Secondary - recovery_case_id carried through Payment Link reference_id / notes
+        // Priority 2: Secondary - recovery_case_id carried through Payment Link
+        // reference_id / notes
         if (recoveryCase == null && referenceId != null && !referenceId.isBlank()) {
             try {
                 UUID caseId = UUID.fromString(referenceId.trim());
@@ -289,14 +289,14 @@ public class RecoveryCaseService {
             return new ReconciliationResult(recoveryCase, true, "Recovery case is already RECOVERED");
         }
 
-        // Guardrail: only WAITING_FOR_OUTCOME or ACTION_PENDING may transition to RECOVERED
+        // Guardrail: only WAITING_FOR_OUTCOME or ACTION_PENDING may transition to
+        // RECOVERED
         if (!RecoveryStatus.WAITING_FOR_OUTCOME.name().equalsIgnoreCase(currentStatus)
                 && !RecoveryStatus.ACTION_PENDING.name().equalsIgnoreCase(currentStatus)) {
             return new ReconciliationResult(
                     recoveryCase,
                     false,
-                    "Recovery case in status '" + currentStatus + "' cannot transition to RECOVERED"
-            );
+                    "Recovery case in status '" + currentStatus + "' cannot transition to RECOVERED");
         }
 
         OffsetDateTime now = OffsetDateTime.now();
@@ -375,7 +375,6 @@ public class RecoveryCaseService {
                 failedCases,
                 totalAtRiskAmount,
                 totalRecoveredAmount,
-                recoveryRatePercentage
-        );
+                recoveryRatePercentage);
     }
 }
