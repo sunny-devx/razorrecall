@@ -18,7 +18,7 @@ spring:
 
 razorrecall:
   webhook:
-    secret: ${RAZORPAY_WEBHOOK_SECRET}
+    secret: ${RAZORPAY_WEBHOOK_SECRET:test_webhook_secret_key_12345}
   guardrails:
     max-recovery-amount: 500000.00
   razorpay:

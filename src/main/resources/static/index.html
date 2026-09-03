@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RazorRecall — Autonomous Payment Recovery Intelligence</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- HEADER -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="logo-badge">RR</div>
+                <div class="brand-text">
+                    <h1>RazorRecall</h1>
+                    <span class="subtitle">Autonomous Payment Recovery Intelligence</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="connectivity-status" id="server-status">
+                    <span class="pulse-indicator"></span>
+                    <span class="status-label" id="status-label">Connecting...</span>
+                </div>
+                <button class="btn btn-primary" id="btn-refresh" title="Refresh Live Data">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- DEMO GUIDANCE BANNER -->
+        <section class="demo-banner">
+            <div class="banner-icon">⚡</div>
+            <div class="banner-content">
+                <strong>Judge Quickstart:</strong> Run <code class="code-pill">./demo.sh</code> in your terminal to trigger an automated end-to-end recovery cycle (Payment Failed → Evaluated → Payment Link Dispatched → Payment Captured → Reconciled). Watch live updates below.
+            </div>
+            <div class="banner-actions">
+                <button class="btn btn-secondary btn-sm" id="btn-eval-detected">Evaluate Detected</button>
+                <button class="btn btn-secondary btn-sm" id="btn-dispatch-due">Dispatch Due</button>
+            </div>
+        </section>
+
+        <!-- METRICS CARDS -->
+        <section class="metrics-grid">
+            <div class="metric-card card-accent-green">
+                <div class="metric-title">Recovered Revenue</div>
+                <div class="metric-value" id="val-recovered-amount">₹0.00</div>
+                <div class="metric-footer" id="val-recovered-cases">0 successful recoveries</div>
+            </div>
+            <div class="metric-card card-accent-blue">
+                <div class="metric-title">Recovery Rate</div>
+                <div class="metric-value" id="val-recovery-rate">0.0%</div>
+                <div class="metric-footer">Conversion of soft failures</div>
+            </div>
+            <div class="metric-card card-accent-amber">
+                <div class="metric-title">At-Risk Revenue</div>
+                <div class="metric-value" id="val-at-risk-amount">₹0.00</div>
+                <div class="metric-footer" id="val-at-risk-cases">Failed checkout volume</div>
+            </div>
+            <div class="metric-card card-accent-purple">
+                <div class="metric-title">Active Cases</div>
+                <div class="metric-value" id="val-active-cases">0</div>
+                <div class="metric-footer" id="val-active-details">0 pending / 0 awaiting payment</div>
+            </div>
+        </section>
+
+        <!-- RECOVERY LIFECYCLE DIAGRAM -->
+        <section class="lifecycle-card">
+            <h2 class="section-title">Recovery State Lifecycle</h2>
+            <div class="lifecycle-flow">
+                <div class="lifecycle-step" id="step-detected">
+                    <div class="step-num">1</div>
+                    <div class="step-body">
+                        <div class="step-name">DETECTED</div>
+                        <div class="step-desc">Webhook verified & failure recorded</div>
+                    </div>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step" id="step-action-pending">
+                    <div class="step-num">2</div>
+                    <div class="step-body">
+                        <div class="step-name">ACTION_PENDING</div>
+                        <div class="step-desc">Guardrails passed & strategy selected</div>
+                    </div>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step" id="step-waiting">
+                    <div class="step-num">3</div>
+                    <div class="step-body">
+                        <div class="step-name">WAITING_FOR_OUTCOME</div>
+                        <div class="step-desc">Payment link created on gateway</div>
+                    </div>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step step-success" id="step-recovered">
+                    <div class="step-num">✔</div>
+                    <div class="step-body">
+                        <div class="step-name">RECOVERED</div>
+                        <div class="step-desc">Captured payment reconciled</div>
+                    </div>
+                </div>
+            </div>
+            <div class="terminal-branches">
+                <span class="branch-label">Safety & Terminal Guards:</span>
+                <span class="badge badge-abstained">ABSTAINED (Hard Failure)</span>
+                <span class="badge badge-escalated">ESCALATED (Anomaly)</span>
+                <span class="badge badge-failed">ACTION_FAILED (Gateway Down)</span>
+            </div>
+        </section>
+
+        <!-- RECOVERY CASES TABLE -->
+        <section class="cases-card">
+            <div class="card-header-flex">
+                <h2 class="section-title">Live Recovery Cases</h2>
+                <div class="table-meta" id="table-count">Loading cases...</div>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Order ID</th>
+                            <th>Payment ID</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Classification</th>
+                            <th>Eligible</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cases-tbody">
+                        <tr>
+                            <td colspan="8" class="table-empty">Loading live recovery cases...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="footer">
+            <div class="footer-left">
+                <span>RazorRecall v1.0.0 — Razorpay AI Buildathon Submission</span>
+            </div>
+            <div class="footer-right">
+                <span class="api-link"><a href="/actuator/health" target="_blank">Health Status</a></span>
+                <span class="divider">•</span>
+                <span class="api-link"><a href="/api/recovery/metrics" target="_blank">Metrics JSON</a></span>
+                <span class="divider">•</span>
+                <span class="api-link"><a href="/api/recovery/cases" target="_blank">Cases JSON</a></span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
