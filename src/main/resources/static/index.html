@@ -22,6 +22,10 @@
                     <span class="pulse-indicator"></span>
                     <span class="status-label" id="status-label">Connecting...</span>
                 </div>
+                <div class="scheduler-status" id="scheduler-status">
+                    <span class="scheduler-dot"></span>
+                    <span class="scheduler-label" id="scheduler-label">Scheduler: Standby</span>
+                </div>
                 <button class="btn btn-primary" id="btn-refresh" title="Refresh Live Data">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -35,9 +39,10 @@
         <section class="demo-banner">
             <div class="banner-icon">⚡</div>
             <div class="banner-content">
-                <strong>Judge Quickstart:</strong> Run <code class="code-pill">./demo.sh</code> in your terminal to trigger an automated end-to-end recovery cycle (Payment Failed → Evaluated → Payment Link Dispatched → Payment Captured → Reconciled). Watch live updates below.
+                <strong>Judge Quickstart:</strong> Run <code class="code-pill">./demo.sh</code> in your terminal to trigger an automated end-to-end recovery cycle (Payment Failed → Evaluated → Payment Link Dispatched → Payment Captured → Reconciled). Or trigger recovery stages below.
             </div>
             <div class="banner-actions">
+                <button class="btn btn-secondary btn-sm" id="btn-run-scheduler" title="Trigger Full Autonomous Recovery Cycle">Run Autonomous Cycle</button>
                 <button class="btn btn-secondary btn-sm" id="btn-eval-detected">Evaluate Detected</button>
                 <button class="btn btn-secondary btn-sm" id="btn-dispatch-due">Dispatch Due</button>
             </div>
@@ -83,7 +88,7 @@
                     <div class="step-num">2</div>
                     <div class="step-body">
                         <div class="step-name">ACTION_PENDING</div>
-                        <div class="step-desc">Guardrails passed & strategy selected</div>
+                        <div class="step-desc">AI diagnosis & guardrail approved</div>
                     </div>
                 </div>
                 <div class="lifecycle-arrow">→</div>
@@ -108,6 +113,7 @@
                 <span class="badge badge-abstained">ABSTAINED (Hard Failure)</span>
                 <span class="badge badge-escalated">ESCALATED (Anomaly)</span>
                 <span class="badge badge-failed">ACTION_FAILED (Gateway Down)</span>
+                <span class="badge badge-expired">EXPIRED (TTL 24h)</span>
             </div>
         </section>
 
@@ -127,7 +133,7 @@
                             <th>Amount</th>
                             <th>Status</th>
                             <th>Classification</th>
-                            <th>Eligible</th>
+                            <th>AI Intelligence & Diagnosis</th>
                             <th>Created At</th>
                         </tr>
                     </thead>
@@ -147,6 +153,8 @@
             </div>
             <div class="footer-right">
                 <span class="api-link"><a href="/actuator/health" target="_blank">Health Status</a></span>
+                <span class="divider">•</span>
+                <span class="api-link"><a href="/api/recovery/scheduler/status" target="_blank">Scheduler Status</a></span>
                 <span class="divider">•</span>
                 <span class="api-link"><a href="/api/recovery/metrics" target="_blank">Metrics JSON</a></span>
                 <span class="divider">•</span>

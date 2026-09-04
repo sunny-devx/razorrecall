@@ -321,4 +321,35 @@ class RecoveryCaseControllerTest {
             mockRazorpayGatewayClient.resetInvocationCount();
         }
     }
+
+    @Test
+    void testEvaluationAndCaseRetrievalExposesAiDiagnosis() throws Exception {
+        String paymentId = "pay_ai_test_" + System.currentTimeMillis();
+        RecoveryCase initialCase = ingestWebhook(paymentId, "GATEWAY_ERROR", "gateway_timeout", "Temporary gateway issue");
+
+        // 1. Evaluate: verify EvaluationResponse exposes AI diagnosis
+        mockMvc.perform(post("/api/recovery/cases/" + initialCase.getId() + "/evaluate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTION_PENDING"))
+                .andExpect(jsonPath("$.aiSuggestedStrategy").exists())
+                .andExpect(jsonPath("$.aiConfidence").isNumber())
+                .andExpect(jsonPath("$.aiProvider").exists())
+                .andExpect(jsonPath("$.aiDiagnosis").exists());
+
+        // 2. GET /cases/{id}: verify RecoveryCaseResponse exposes AI diagnosis
+        mockMvc.perform(get("/api/recovery/cases/" + initialCase.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTION_PENDING"))
+                .andExpect(jsonPath("$.aiSuggestedStrategy").exists())
+                .andExpect(jsonPath("$.aiConfidence").isNumber())
+                .andExpect(jsonPath("$.aiProvider").exists())
+                .andExpect(jsonPath("$.aiDiagnosis").exists());
+
+        // 3. GET /cases: verify list exposes AI diagnosis for evaluated cases
+        mockMvc.perform(get("/api/recovery/cases?status=ACTION_PENDING"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(org.hamcrest.Matchers.greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[0].aiSuggestedStrategy").exists())
+                .andExpect(jsonPath("$[0].aiConfidence").exists());
+    }
 }

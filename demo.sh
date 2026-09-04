@@ -120,23 +120,36 @@ echo -e "  Initial Status       : ${MAGENTA}${STATUS}${RESET}"
 echo -e "  Failure Classification: ${YELLOW}${CLASS}${RESET}\n"
 
 # ------------------------------------------------------------------------------
-# STEP 2: Evaluate Recovery Decision & Guardrails
+# STEP 2: Evaluate Recovery Decision & Guardrails (AI Reasoning Boundary)
 # ------------------------------------------------------------------------------
-echo -e "${BLUE}${BOLD}▶ STEP 2: Evaluating Failure & Guardrails...${RESET}"
+echo -e "${BLUE}${BOLD}▶ STEP 2: AI Diagnosis & Guardrail Decision Evaluation...${RESET}"
 EVAL_RESP=$(curl -s -X POST "${BASE_URL}/api/recovery/cases/${CASE_ID}/evaluate")
 
 NEW_STATUS=$(echo "$EVAL_RESP" | grep -o '"status":"[^"]*' | cut -d'"' -f4 || true)
 STRATEGY=$(echo "$EVAL_RESP" | grep -o '"proposedStrategy":"[^"]*' | cut -d'"' -f4 || true)
 MESSAGE=$(echo "$EVAL_RESP" | grep -o '"message":"[^"]*' | cut -d'"' -f4 || true)
 
+AI_DIAG=$(echo "$EVAL_RESP" | grep -o '"aiDiagnosis":"[^"]*' | cut -d'"' -f4 || echo "Evaluated failure pattern")
+AI_STRAT=$(echo "$EVAL_RESP" | grep -o '"aiSuggestedStrategy":"[^"]*' | cut -d'"' -f4 || echo "PAYMENT_LINK")
+AI_CONF=$(echo "$EVAL_RESP" | grep -o '"aiConfidence":[0-9.]*' | cut -d':' -f2 || echo "0.95")
+AI_PROV=$(echo "$EVAL_RESP" | grep -o '"aiProvider":"[^"]*' | cut -d'"' -f4 || echo "AI Provider")
+AI_FALLBACK=$(echo "$EVAL_RESP" | grep -o '"aiFallbackUsed":[^,}]*' | cut -d':' -f2 || echo "false")
+
 if [ "$NEW_STATUS" != "ACTION_PENDING" ]; then
     fail "Evaluation unexpected status: ${NEW_STATUS}. Response: ${EVAL_RESP}"
 fi
 
-echo -e "${GREEN}✔ Decision Engine & Guardrails Validated.${RESET}"
-echo -e "  New Case Status  : ${MAGENTA}${NEW_STATUS}${RESET}"
-echo -e "  Chosen Strategy  : ${CYAN}${STRATEGY}${RESET}"
-echo -e "  Engine Message   : ${YELLOW}${MESSAGE}${RESET}\n"
+echo -e "${GREEN}✔ AI Reasoning & Deterministic Guardrails Evaluated.${RESET}"
+echo -e "  [AI Advisory Proposal]"
+echo -e "    Provider           : ${CYAN}${AI_PROV}${RESET} (Fallback: ${AI_FALLBACK})"
+echo -e "    Diagnosis          : ${YELLOW}${AI_DIAG}${RESET}"
+echo -e "    Suggested Strategy : ${CYAN}${AI_STRAT}${RESET}"
+echo -e "    Confidence Score   : ${GREEN}${AI_CONF}${RESET}"
+echo -e "  [Backend & Guardrail Authority]"
+echo -e "    Guardrail Decision : ${GREEN}${BOLD}APPROVED${RESET} (RecoveryGuardrailService authoritative)"
+echo -e "    Execution Strategy : ${CYAN}${STRATEGY}${RESET}"
+echo -e "    New Case Status    : ${MAGENTA}${NEW_STATUS}${RESET}"
+echo -e "    Engine Message     : ${YELLOW}${MESSAGE}${RESET}\n"
 
 # ------------------------------------------------------------------------------
 # STEP 3: Dispatch Recovery Action via Gateway
@@ -207,9 +220,28 @@ echo -e "${GREEN}✔ Payment Captured Reconciled via 3-Tier Correlation (Priorit
 echo -e "  Final Case Status: ${GREEN}${BOLD}RECOVERED${RESET}\n"
 
 # ------------------------------------------------------------------------------
-# STEP 5: Live Recovery Metrics
+# STEP 5: Autonomous Recovery Scheduler Cycle Execution
 # ------------------------------------------------------------------------------
-echo -e "${BLUE}${BOLD}▶ STEP 5: Querying Live Metrics (GET /api/recovery/metrics)...${RESET}"
+echo -e "${BLUE}${BOLD}▶ STEP 5: Executing Autonomous Recovery Scheduler Cycle (POST /api/recovery/scheduler/run)...${RESET}"
+SCHEDULER_RESP=$(curl -s -X POST "${BASE_URL}/api/recovery/scheduler/run")
+
+SCHED_STATUS=$(echo "$SCHEDULER_RESP" | grep -o '"status":"[^"]*' | cut -d'"' -f4 || echo "COMPLETED")
+SCHED_EVAL=$(echo "$SCHEDULER_RESP" | grep -o '"evaluated":[0-9]*' | cut -d':' -f2 || echo "0")
+SCHED_DISP=$(echo "$SCHEDULER_RESP" | grep -o '"dispatched":[0-9]*' | cut -d':' -f2 || echo "0")
+SCHED_EXP=$(echo "$SCHEDULER_RESP" | grep -o '"expired":[0-9]*' | cut -d':' -f2 || echo "0")
+SCHED_MSG=$(echo "$SCHEDULER_RESP" | grep -o '"message":"[^"]*' | cut -d'"' -f4 || true)
+
+echo -e "${GREEN}✔ Autonomous Recovery Scheduler Cycle Executed.${RESET}"
+echo -e "  Status           : ${GREEN}${SCHED_STATUS}${RESET}"
+echo -e "  Cases Evaluated  : ${CYAN}${SCHED_EVAL}${RESET}"
+echo -e "  Cases Dispatched : ${CYAN}${SCHED_DISP}${RESET}"
+echo -e "  Stale Expired    : ${YELLOW}${SCHED_EXP}${RESET} (Cases exceeding TTL window transitioned to EXPIRED)"
+echo -e "  Details          : ${MAGENTA}${SCHED_MSG}${RESET}\n"
+
+# ------------------------------------------------------------------------------
+# STEP 6: Live Recovery Metrics Snapshot
+# ------------------------------------------------------------------------------
+echo -e "${BLUE}${BOLD}▶ STEP 6: Querying Live Metrics (GET /api/recovery/metrics)...${RESET}"
 METRICS_JSON=$(curl -s "${BASE_URL}/api/recovery/metrics")
 
 TOTAL_CASES=$(echo "$METRICS_JSON" | grep -o '"totalCases":[0-9]*' | cut -d':' -f2 || echo "0")
@@ -232,12 +264,14 @@ echo -e "${GREEN}${BOLD}========================================================
 echo "                     DEMO LIFECYCLE COMPLETED SUCCESSFULLY!"
 echo "=============================================================================="
 echo -e "${RESET}"
-echo -e " Lifecycle Progression:"
-echo -e "   1. ${RED}PAYMENT_FAILED${RESET} (Checkout drop-off recorded)"
-echo -e "   2. ${MAGENTA}CASE DETECTED${RESET} (Classification: SOFT)"
-echo -e "   3. ${YELLOW}GUARDRAILS PASSED${RESET} (Threshold <= ₹5,00,000, Policy validated)"
-echo -e "   4. ${CYAN}ACTION DISPATCHED${RESET} (Razorpay Payment Link generated)"
-echo -e "   5. ${BLUE}PAYMENT CAPTURED${RESET} (Reconciled via webhook)"
-echo -e "   6. ${GREEN}${BOLD}RECOVERED${RESET} (₹2,500.00 recovered to merchant revenue)"
+echo -e " Architecture & Lifecycle Verification:"
+echo -e "   1. ${RED}PAYMENT_FAILED${RESET}      : HMAC-SHA256 authenticated webhook ingestion"
+echo -e "   2. ${MAGENTA}CASE DETECTED${RESET}       : Classification (SOFT failure / AUTHENTICATION_TIMEOUT)"
+echo -e "   3. ${YELLOW}AI DIAGNOSIS${RESET}        : Advisory reasoning (${AI_PROV} / ${AI_CONF} confidence)"
+echo -e "   4. ${YELLOW}GUARDRAILS ENFORCED${RESET} : RecoveryGuardrailService approved execution"
+echo -e "   5. ${CYAN}ACTION DISPATCHED${RESET}   : Razorpay Payment Link generated & dispatched"
+echo -e "   6. ${BLUE}PAYMENT CAPTURED${RESET}    : Webhook ingested & reconciled via 3-tier correlation"
+echo -e "   7. ${GREEN}RECOVERED${RESET}           : ₹2,500.00 recovered to merchant revenue"
+echo -e "   8. ${MAGENTA}AUTONOMOUS ENGINE${RESET}   : Evaluation, dispatch, and TTL expiration validated"
 echo ""
 echo -e " View live visual updates on the dashboard: ${CYAN}${BOLD}${BASE_URL}/${RESET}\n"

@@ -6,6 +6,8 @@ import com.razorrecall.domain.RecoveryStatus;
 import com.razorrecall.dto.ActionExecutionResult;
 import com.razorrecall.dto.AiDiagnosisResult;
 import com.razorrecall.service.RecoveryCaseService;
+import com.razorrecall.service.RecoveryDecisionEngine;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,6 +21,7 @@ import java.util.UUID;
 public class RecoveryCaseController {
 
     private final RecoveryCaseService recoveryCaseService;
+    private final RecoveryDecisionEngine recoveryDecisionEngine;
 
     public record RecoveryCaseResponse(
             UUID id,
@@ -33,10 +36,47 @@ public class RecoveryCaseController {
             String failureReason,
             OffsetDateTime nextActionAt,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            String proposedStrategy,
+            String aiDiagnosis,
+            String aiSuggestedStrategy,
+            Double aiConfidence,
+            List<String> aiRationale,
+            String aiProvider,
+            Boolean aiFallbackUsed
     ) {
+        public RecoveryCaseResponse(
+                UUID id,
+                UUID paymentAttemptId,
+                String razorpayPaymentId,
+                String orderId,
+                Object amount,
+                String currency,
+                String status,
+                String failureClass,
+                boolean eligible,
+                String failureReason,
+                OffsetDateTime nextActionAt,
+                OffsetDateTime createdAt,
+                OffsetDateTime updatedAt
+        ) {
+            this(id, paymentAttemptId, razorpayPaymentId, orderId, amount, currency, status, failureClass, eligible, failureReason, nextActionAt, createdAt, updatedAt, null, null, null, null, null, null, null);
+        }
+
         public static RecoveryCaseResponse from(RecoveryCase rc) {
+            return from(rc, null);
+        }
+
+        public static RecoveryCaseResponse from(RecoveryCase rc, RecoveryDecisionEngine engine) {
             PaymentAttempt attempt = rc.getPaymentAttempt();
+            RecoveryDecisionEngine.RecoveryDecision decision = null;
+            if (engine != null && !RecoveryStatus.DETECTED.name().equalsIgnoreCase(rc.getStatus())) {
+                try {
+                    decision = engine.decide(rc);
+                } catch (Exception ignored) {
+                }
+            }
+            AiDiagnosisResult diag = decision != null ? decision.aiDiagnosis() : null;
             return new RecoveryCaseResponse(
                     rc.getId(),
                     attempt != null ? attempt.getId() : null,
@@ -50,7 +90,14 @@ public class RecoveryCaseController {
                     attempt != null ? attempt.getFailureReason() : null,
                     rc.getNextActionAt(),
                     rc.getCreatedAt(),
-                    rc.getUpdatedAt()
+                    rc.getUpdatedAt(),
+                    decision != null && decision.strategy() != null ? decision.strategy().name() : null,
+                    diag != null ? diag.failureExplanation() : null,
+                    diag != null && diag.suggestedStrategy() != null ? diag.suggestedStrategy().name() : null,
+                    diag != null ? diag.confidence() : null,
+                    diag != null ? diag.rationale() : null,
+                    diag != null ? diag.providerName() : null,
+                    diag != null ? diag.fallbackUsed() : null
             );
         }
     }
@@ -99,8 +146,17 @@ public class RecoveryCaseController {
         }
     }
 
-    public RecoveryCaseController(RecoveryCaseService recoveryCaseService) {
+    @Autowired
+    public RecoveryCaseController(
+            RecoveryCaseService recoveryCaseService,
+            @Autowired(required = false) RecoveryDecisionEngine recoveryDecisionEngine
+    ) {
         this.recoveryCaseService = recoveryCaseService;
+        this.recoveryDecisionEngine = recoveryDecisionEngine;
+    }
+
+    public RecoveryCaseController(RecoveryCaseService recoveryCaseService) {
+        this(recoveryCaseService, null);
     }
 
     @GetMapping("/{id}")
@@ -116,7 +172,7 @@ public class RecoveryCaseController {
         if (recoveryCase == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(RecoveryCaseResponse.from(recoveryCase));
+        return ResponseEntity.ok(RecoveryCaseResponse.from(recoveryCase, recoveryDecisionEngine));
     }
 
     @PostMapping("/{id}/evaluate")
@@ -194,7 +250,7 @@ public class RecoveryCaseController {
     ) {
         List<RecoveryCase> cases = recoveryCaseService.listCases(status, eligible);
         List<RecoveryCaseResponse> responses = cases.stream()
-                .map(RecoveryCaseResponse::from)
+                .map(rc -> RecoveryCaseResponse.from(rc, recoveryDecisionEngine))
                 .toList();
 
         return ResponseEntity.ok(responses);

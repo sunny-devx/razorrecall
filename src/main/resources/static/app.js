@@ -10,6 +10,7 @@
 
     // DOM Elements
     const statusLabel = document.getElementById("status-label");
+    const schedulerLabel = document.getElementById("scheduler-label");
     const valRecoveredAmount = document.getElementById("val-recovered-amount");
     const valRecoveredCases = document.getElementById("val-recovered-cases");
     const valRecoveryRate = document.getElementById("val-recovery-rate");
@@ -20,6 +21,7 @@
     const casesTbody = document.getElementById("cases-tbody");
     const tableCount = document.getElementById("table-count");
     const btnRefresh = document.getElementById("btn-refresh");
+    const btnRunScheduler = document.getElementById("btn-run-scheduler");
     const btnEvalDetected = document.getElementById("btn-eval-detected");
     const btnDispatchDue = document.getElementById("btn-dispatch-due");
 
@@ -54,6 +56,7 @@
         else if (s === "ABSTAINED") badgeClass = "badge-abstained";
         else if (s === "ESCALATED") badgeClass = "badge-escalated";
         else if (s === "ACTION_FAILED") badgeClass = "badge-failed";
+        else if (s === "EXPIRED") badgeClass = "badge-expired";
 
         return `<span class="badge ${badgeClass}">${s}</span>`;
     }
@@ -71,7 +74,7 @@
         try {
             const res = await fetch(`${API_BASE}/actuator/health`);
             if (res.ok) {
-                statusLabel.textContent = "Connected (Mock Gateway)";
+                statusLabel.textContent = "Connected (Server UP)";
                 statusLabel.style.color = "#10b981";
             } else {
                 statusLabel.textContent = `Server Status: HTTP ${res.status}`;
@@ -80,6 +83,19 @@
         } catch (err) {
             statusLabel.textContent = "Disconnected";
             statusLabel.style.color = "#ef4444";
+        }
+    }
+
+    async function checkSchedulerStatus() {
+        if (!schedulerLabel) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/recovery/scheduler/status`);
+            if (res.ok) {
+                const data = await res.json();
+                schedulerLabel.textContent = `Scheduler: ${data.enabled ? "Active" : "Standby (Ready)"}`;
+            }
+        } catch (e) {
+            schedulerLabel.textContent = "Scheduler: Standby";
         }
     }
 
@@ -131,8 +147,35 @@
                 const amount = formatCurrency(c.amount);
                 const statusBadge = getStatusBadge(c.status);
                 const classBadge = getClassBadge(c.failureClass);
-                const eligible = c.eligible ? `<span style="color:#10b981;font-weight:600;">Yes</span>` : `<span style="color:#94a3b8;">No</span>`;
                 const created = formatDate(c.createdAt);
+
+                let aiHtml = `<span class="ai-pending">Pending Evaluation</span>`;
+                if (c.status !== "DETECTED") {
+                    const strat = c.proposedStrategy || c.aiSuggestedStrategy || "ABSTAIN";
+                    const conf = c.aiConfidence !== null && c.aiConfidence !== undefined ? c.aiConfidence : null;
+                    const provider = c.aiProvider || (c.aiFallbackUsed ? "Fallback" : "Rule Engine");
+                    const diag = c.aiDiagnosis || c.failureReason || "Failure diagnosis evaluated";
+
+                    let confBadge = "";
+                    if (conf !== null) {
+                        const pct = Math.round(conf * 100);
+                        let confClass = "confidence-high";
+                        if (pct < 60) confClass = "confidence-low";
+                        else if (pct < 85) confClass = "confidence-medium";
+                        confBadge = `<span class="badge-confidence ${confClass}">${pct}% conf</span>`;
+                    }
+
+                    aiHtml = `
+                        <div class="ai-cell">
+                            <div class="ai-meta-line">
+                                <span class="ai-strategy-tag">${strat}</span>
+                                ${confBadge}
+                                <span class="ai-provider-tag">${provider}</span>
+                            </div>
+                            <div class="ai-diagnosis-text" title="${diag}">${diag}</div>
+                        </div>
+                    `;
+                }
 
                 html += `
                     <tr>
@@ -142,7 +185,7 @@
                         <td style="font-weight:600;">${amount}</td>
                         <td>${statusBadge}</td>
                         <td>${classBadge}</td>
-                        <td>${eligible}</td>
+                        <td>${aiHtml}</td>
                         <td style="color:#94a3b8;">${created}</td>
                     </tr>
                 `;
@@ -159,6 +202,7 @@
     async function refreshAll() {
         await Promise.all([
             checkHealth(),
+            checkSchedulerStatus(),
             fetchMetrics(),
             fetchCases()
         ]);
@@ -168,6 +212,24 @@
     if (btnRefresh) {
         btnRefresh.addEventListener("click", () => {
             refreshAll();
+        });
+    }
+
+    if (btnRunScheduler) {
+        btnRunScheduler.addEventListener("click", async () => {
+            btnRunScheduler.disabled = true;
+            btnRunScheduler.textContent = "Running Cycle...";
+            try {
+                const res = await fetch(`${API_BASE}/api/recovery/scheduler/run`, { method: "POST" });
+                if (res.ok) {
+                    await refreshAll();
+                }
+            } catch (e) {
+                console.error("Scheduler run error:", e);
+            } finally {
+                btnRunScheduler.disabled = false;
+                btnRunScheduler.textContent = "Run Autonomous Cycle";
+            }
         });
     }
 

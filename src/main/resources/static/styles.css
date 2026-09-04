@@ -122,6 +122,26 @@ body {
     box-shadow: 0 0 8px var(--accent-green);
 }
 
+.scheduler-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.scheduler-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan);
+}
+
 /* BUTTONS */
 .btn {
     display: inline-flex;
@@ -353,6 +373,7 @@ body {
 .badge-abstained { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
 .badge-escalated { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
 .badge-failed { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+.badge-expired { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); text-decoration: line-through; }
 
 .badge-soft { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
 .badge-hard { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
@@ -418,6 +439,84 @@ body {
 .mono {
     font-family: monospace;
     font-size: 0.8rem;
+}
+
+/* AI INTELLIGENCE COLUMN */
+.ai-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 340px;
+    white-space: normal;
+}
+
+.ai-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.ai-strategy-tag {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.12);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.badge-confidence {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.confidence-high {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.confidence-medium {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.confidence-low {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ai-provider-tag {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.ai-diagnosis-text {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+}
+
+.ai-pending {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* FOOTER */
