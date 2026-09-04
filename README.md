@@ -331,3 +331,13 @@ All database tables and constraints are managed via Flyway in `src/main/resource
 - [x] **Block 8**: Turnkey Demo Runner (`demo.sh`) & Embedded Visual Dashboard.
 - [x] **Block 9**: Autonomous Recovery Scheduler & Expiration Engine (`EXPIRED` State & 24h TTL).
 - [x] **Block 10**: Judge Dashboard AI Transparency, Autonomous Trigger Endpoint (`/api/recovery/scheduler/run`), & Complete Documentation.
+- [x] **Block 11**: Final Integration, Packaging, and Submission Verification.
+
+---
+
+## 13. Known Test-Mode Considerations & Production Hardening
+
+- **Offline Mock vs. Live Test Mode**: The default `RAZORPAY_MODE=mock` is completely self-contained, offline, and deterministic. It requires no network calls or API keys, making it ideal for automated evaluation. Setting `RAZORPAY_MODE=test` connects to Razorpay's live sandbox API.
+- **Inbound Sandbox Webhook Tunneling**: When testing with the real Razorpay Dashboard in sandbox mode, an HTTPS tunnel (e.g. `ngrok http 8080`) is required for Razorpay's servers to reach your local webhook endpoint (`/api/webhooks/razorpay`). For local evaluations without a tunnel, `./demo.sh` generates and HMAC-signs compliant payloads directly.
+- **AI Quota & Fallback Behavior**: Live Gemini calls depend on a valid `GEMINI_API_KEY`. If the key is missing, network is unavailable, or quota is exhausted, the system automatically engages the deterministic fallback provider (`DeterministicFallbackAiDiagnosisProvider`) without throwing errors or interrupting the recovery cycle.
+- **Scheduler Determinism**: The autonomous scheduler is disabled by default (`razorrecall.scheduler.enabled: false`) to ensure fast, isolated, deterministic unit and integration test runs. In production, enable background polling loops by setting `RECOVERY_SCHEDULER_ENABLED=true`. Judges can trigger on-demand recovery cycles at any time using `POST /api/recovery/scheduler/run` or via the dashboard UI.
