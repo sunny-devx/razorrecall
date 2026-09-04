@@ -32,3 +32,9 @@ razorrecall:
       model: ${GEMINI_MODEL:gemini-2.0-flash}
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
       timeout-ms: 3000
+  scheduler:
+    enabled: ${RECOVERY_SCHEDULER_ENABLED:false}
+    eval-interval-ms: 10000
+    dispatch-interval-ms: 15000
+    expire-interval-ms: 60000
+    expiry-window-hours: 24

@@ -251,6 +251,27 @@ public class RecoveryCaseService {
     }
 
     @Transactional
+    public List<RecoveryCase> expireStaleCases(OffsetDateTime cutoff) {
+        if (cutoff == null) {
+            throw new IllegalArgumentException("Cutoff timestamp must not be null");
+        }
+
+        List<RecoveryCase> staleCases = recoveryCaseRepository
+                .findByStatusAndCreatedAtBefore(RecoveryStatus.WAITING_FOR_OUTCOME.name(), cutoff);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        for (RecoveryCase rc : staleCases) {
+            rc.setStatus(RecoveryStatus.EXPIRED.name());
+            rc.setNextActionAt(null);
+            rc.setUpdatedAt(now);
+            recoveryCaseRepository.save(rc);
+        }
+
+        return staleCases;
+    }
+
+
+    @Transactional
     public ReconciliationResult reconcileCapturedPayment(
             String orderId,
             String referenceId,
